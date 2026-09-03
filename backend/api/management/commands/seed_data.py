@@ -29,6 +29,14 @@ class Command(BaseCommand):
             created_users[udata['role']] = user
             self.stdout.write(f"User '{user.username}' (Role: {user.role}) ready. Password: 123456")
 
+        # Admin va kassani directorga bog'lash (multi-tenant)
+        director_user = created_users['director']
+        for staff_role in ('admin', 'kassa'):
+            staff = created_users[staff_role]
+            staff.director = director_user
+            staff.save()
+        self.stdout.write(f"Admin & Kassa -> director '{director_user.username}' ga bog'landi.")
+
         # 2. Create Visitors
         visitors_data = [
             {'full_name': 'Akmal Karimov', 'age': 34, 'gender': 'M', 'category': 'Yangi mijoz', 'comment': 'Tish tozalash va plomba uchun keldi'},
@@ -43,7 +51,7 @@ class Command(BaseCommand):
         for vdata in visitors_data:
             vis, _ = Visitor.objects.get_or_create(
                 full_name=vdata['full_name'],
-                defaults=vdata
+                defaults={**vdata, 'director': director_user}
             )
             created_visitors.append(vis)
 
@@ -51,6 +59,7 @@ class Command(BaseCommand):
         if not Transaction.objects.exists():
             t1 = Transaction.objects.create(
                 type='INFLOW',
+                director=director_user,
                 visitor=created_visitors[0],
                 amount=450000,
                 payment_method='CASH',
@@ -59,6 +68,7 @@ class Command(BaseCommand):
             )
             t2 = Transaction.objects.create(
                 type='INFLOW',
+                director=director_user,
                 visitor=created_visitors[1],
                 amount=1200000,
                 payment_method='CARD',
@@ -67,6 +77,7 @@ class Command(BaseCommand):
             )
             t3 = Transaction.objects.create(
                 type='INFLOW',
+                director=director_user,
                 custom_source_name='Dorixona ijara haqidan',
                 amount=800000,
                 payment_method='TRANSFER',
@@ -75,6 +86,7 @@ class Command(BaseCommand):
             )
             t4 = Transaction.objects.create(
                 type='OUTFLOW',
+                director=director_user,
                 amount=250000,
                 payment_method='CASH',
                 expense_category='Kommunal & Kantselyariya',
@@ -83,11 +95,16 @@ class Command(BaseCommand):
             )
             t5 = Transaction.objects.create(
                 type='OUTFLOW',
+                director=director_user,
                 amount=600000,
                 payment_method='CARD',
                 expense_category='Tibbiy materiallar',
                 comment='Stomatologik plomba materiallari haridi',
                 created_by=created_users['director']
             )
+
+        # Direktori yo'q (eski) demo ma'lumotlarni ham shu directorga bog'lash
+        Visitor.objects.filter(director__isnull=True).update(director=director_user)
+        Transaction.objects.filter(director__isnull=True).update(director=director_user)
 
         self.stdout.write(self.style.SUCCESS("Database successfully seeded!"))

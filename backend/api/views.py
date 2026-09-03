@@ -84,8 +84,14 @@ class VisitorViewSet(viewsets.ModelViewSet):
     ordering_fields = ['created_at', 'full_name', 'age']
 
     def get_queryset(self):
+        user = self.request.user
         qs = Visitor.objects.all()
+        if not user.is_super:
+            qs = qs.filter(director=user.tenant_director)
         return filter_by_period(qs, self.request, 'created_at')
+
+    def perform_create(self, serializer):
+        serializer.save(director=self.request.user.tenant_director)
 
 
 class TransactionViewSet(viewsets.ModelViewSet):
@@ -98,19 +104,29 @@ class TransactionViewSet(viewsets.ModelViewSet):
     ordering_fields = ['created_at', 'amount']
 
     def get_queryset(self):
+        user = self.request.user
         qs = Transaction.objects.all().select_related('visitor', 'created_by')
+        if not user.is_super:
+            qs = qs.filter(director=user.tenant_director)
         return filter_by_period(qs, self.request, 'created_at')
 
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        serializer.save(created_by=self.request.user, director=self.request.user.tenant_director)
 
 
 class DashboardStatsView(APIView):
     permission_classes = [IsDirector]
 
     def get(self, request):
-        trans_qs = filter_by_period(Transaction.objects.all(), request, 'created_at')
-        vis_qs = filter_by_period(Visitor.objects.all(), request, 'created_at')
+        user = request.user
+        trans_base = Transaction.objects.all()
+        vis_base = Visitor.objects.all()
+        if not user.is_super:
+            d = user.tenant_director
+            trans_base = trans_base.filter(director=d)
+            vis_base = vis_base.filter(director=d)
+        trans_qs = filter_by_period(trans_base, request, 'created_at')
+        vis_qs = filter_by_period(vis_base, request, 'created_at')
 
         # 1. Financial stats UZS
         inflow_uzs = trans_qs.filter(type='INFLOW', currency='UZS').aggregate(s=Sum('amount'))['s'] or 0

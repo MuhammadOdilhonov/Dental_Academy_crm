@@ -6,7 +6,7 @@ from .models import CustomUser, Visitor, Transaction
 class CustomUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
-        fields = ('id', 'username', 'first_name', 'last_name', 'role')
+        fields = ('id', 'username', 'first_name', 'last_name', 'role', 'director')
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
