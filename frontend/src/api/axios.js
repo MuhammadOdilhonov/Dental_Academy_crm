@@ -1,7 +1,13 @@
 import axios from 'axios';
 
+// Production: backend Cloudflare Tunnel (HTTPS) orqali ulanadi.
+// VITE_API_URL env o'rnatilsa, o'sha ishlatiladi (masalan local dev'da '/api').
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL ||
+  'https://garbage-spy-brighton-empire.trycloudflare.com/api';
+
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
