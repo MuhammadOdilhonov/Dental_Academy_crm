@@ -1,9 +1,6 @@
 {
-  "headers": [
-    { "source": "/(.*)", "headers": [ { "key": "x-config-test", "value": "read-ok" } ] }
-  ],
   "rewrites": [
-    { "source": "/api/:path*", "destination": "http://79.108.161.206/api/:path*" },
+    { "source": "/api/:path*", "destination": "https://garbage-spy-brighton-empire.trycloudflare.com/api/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
