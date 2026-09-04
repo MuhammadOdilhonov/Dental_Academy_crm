@@ -29,8 +29,8 @@ class IsKassaOrDirector(permissions.BasePermission):
 class VisitorPermission(permissions.BasePermission):
     """
     - Superadmin: to'liq
-    - Director: to'liq CRUD
-    - Admin (Reception): to'liq CRUD (mijoz yaratish, tahrirlash, ko'rish)
+    - Director: to'liq CRUD (yaratish, TAHRIRLASH, o'chirish, ko'rish)
+    - Admin (Reception): yaratish + ko'rish (tahrirlash/o'chirish YO'Q — faqat direktor)
     - Kassa: faqat o'qish (to'lov uchun mijozlarni ko'rish)
     """
     def has_permission(self, request, view):
@@ -38,18 +38,20 @@ class VisitorPermission(permissions.BasePermission):
             return False
         if _is_super(request.user):
             return True
-        if request.user.role in ['director', 'admin']:
-            return True
-        if request.user.role == 'kassa':
-            return request.method in permissions.SAFE_METHODS
-        return False
+        role = request.user.role
+        if request.method in permissions.SAFE_METHODS:
+            return role in ['director', 'admin', 'kassa']
+        if request.method == 'POST':
+            return role in ['director', 'admin']
+        # PUT / PATCH / DELETE — faqat direktor tahrirlay/o'chira oladi
+        return role == 'director'
 
 
 class TransactionPermission(permissions.BasePermission):
     """
     - Superadmin: to'liq
-    - Director: to'liq CRUD + barcha hisobotlar
-    - Kassa: kirim/chiqim yaratish, tranzaksiyalarni o'qish
+    - Director: to'liq CRUD + barcha hisobotlar (TAHRIRLASH faqat direktorda)
+    - Kassa: kirim/chiqim yaratish, tranzaksiyalarni o'qish (tahrirlash YO'Q)
     - Admin: kirish yo'q
     """
     def has_permission(self, request, view):
@@ -57,6 +59,10 @@ class TransactionPermission(permissions.BasePermission):
             return False
         if _is_super(request.user):
             return True
-        if request.user.role in ['director', 'kassa']:
-            return True
-        return False
+        role = request.user.role
+        if request.method in permissions.SAFE_METHODS:
+            return role in ['director', 'kassa']
+        if request.method == 'POST':
+            return role in ['director', 'kassa']
+        # PUT / PATCH / DELETE — faqat direktor tahrirlay/o'chira oladi
+        return role == 'director'

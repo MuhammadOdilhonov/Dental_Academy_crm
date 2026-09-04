@@ -19,7 +19,9 @@ import {
   Landmark,
   UserCheck,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Pencil,
+  Calendar
 } from 'lucide-react';
 
 import PeriodFilter from '../components/PeriodFilter';
@@ -50,6 +52,11 @@ const CashRegister = () => {
   const [outflowModalOpen, setOutflowModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
+  // Tahrirlanayotgan tranzaksiya id (faqat direktor) — null bo'lsa yangi qo'shish
+  const [editingId, setEditingId] = useState(null);
+
+  // Tahrirlash / o'tgan sanaga kirim-chiqim faqat direktor (yoki superadmin) uchun
+  const isDirector = ['director', 'superadmin'].includes(user?.role);
 
   // Inflow Form State
   const [inflowData, setInflowData] = useState({
@@ -59,7 +66,8 @@ const CashRegister = () => {
     amount: '',
     currency: 'UZS',
     payment_method: 'CASH',
-    comment: ''
+    comment: '',
+    created_at: ''  // faqat direktor uchun — o'tgan kun sanasi (YYYY-MM-DD)
   });
 
   // Outflow Form State
@@ -68,7 +76,8 @@ const CashRegister = () => {
     currency: 'UZS',
     payment_method: 'CASH',
     expense_category: '',
-    comment: ''
+    comment: '',
+    created_at: ''  // faqat direktor uchun — o'tgan kun sanasi (YYYY-MM-DD)
   });
 
   // Balance Metrics by Currency
@@ -280,17 +289,17 @@ const CashRegister = () => {
         custom_source_name: inflowData.isCustomSource ? inflowData.custom_source_name : null,
       };
 
-      await api.post('/transactions/', payload);
-      setInflowModalOpen(false);
-      setInflowData({
-        visitor: '',
-        isCustomSource: false,
-        custom_source_name: '',
-        amount: '',
-        currency: 'UZS',
-        payment_method: 'CASH',
-        comment: ''
-      });
+      // Faqat direktor o'tgan sanaga kirim kirita oladi
+      if (isDirector && inflowData.created_at) {
+        payload.created_at = `${inflowData.created_at}T12:00:00`;
+      }
+
+      if (editingId) {
+        await api.patch(`/transactions/${editingId}/`, payload);
+      } else {
+        await api.post('/transactions/', payload);
+      }
+      closeInflowModal();
       fetchData();
     } catch (err) {
       console.error('Inflow submit error:', err);
@@ -324,21 +333,92 @@ const CashRegister = () => {
         comment: outflowData.comment,
       };
 
-      await api.post('/transactions/', payload);
-      setOutflowModalOpen(false);
-      setOutflowData({
-        amount: '',
-        currency: 'UZS',
-        payment_method: 'CASH',
-        expense_category: '',
-        comment: ''
-      });
+      // Faqat direktor o'tgan sanaga chiqim kirita oladi
+      if (isDirector && outflowData.created_at) {
+        payload.created_at = `${outflowData.created_at}T12:00:00`;
+      }
+
+      if (editingId) {
+        await api.patch(`/transactions/${editingId}/`, payload);
+      } else {
+        await api.post('/transactions/', payload);
+      }
+      closeOutflowModal();
       fetchData();
     } catch (err) {
       console.error('Outflow submit error:', err);
       setFormError('Chiqim saqlashda xatolik yuz berdi.');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // ---- Modal ochish / yopish yordamchilari ----
+  const closeInflowModal = () => {
+    setInflowModalOpen(false);
+    setEditingId(null);
+    setInflowData({
+      visitor: '', isCustomSource: false, custom_source_name: '',
+      amount: '', currency: 'UZS', payment_method: 'CASH', comment: '', created_at: ''
+    });
+  };
+
+  const closeOutflowModal = () => {
+    setOutflowModalOpen(false);
+    setEditingId(null);
+    setOutflowData({
+      amount: '', currency: 'UZS', payment_method: 'CASH',
+      expense_category: '', comment: '', created_at: ''
+    });
+  };
+
+  const openInflowModal = () => {
+    setFormError('');
+    setEditingId(null);
+    setInflowData({
+      visitor: '', isCustomSource: false, custom_source_name: '',
+      amount: '', currency: 'UZS', payment_method: 'CASH', comment: '', created_at: ''
+    });
+    setInflowModalOpen(true);
+  };
+
+  const openOutflowModal = () => {
+    setFormError('');
+    setEditingId(null);
+    setOutflowData({
+      amount: '', currency: 'UZS', payment_method: 'CASH',
+      expense_category: '', comment: '', created_at: ''
+    });
+    setOutflowModalOpen(true);
+  };
+
+  // Mavjud tranzaksiyani tahrirlash (faqat direktor)
+  const openEditModal = (item) => {
+    setFormError('');
+    setEditingId(item.id);
+    const dateStr = item.created_at ? new Date(item.created_at).toISOString().slice(0, 10) : '';
+    if (item.type === 'INFLOW') {
+      setInflowData({
+        visitor: item.visitor ? String(item.visitor) : '',
+        isCustomSource: !item.visitor && !!item.custom_source_name,
+        custom_source_name: item.custom_source_name || '',
+        amount: String(item.amount),
+        currency: item.currency || 'UZS',
+        payment_method: item.payment_method || 'CASH',
+        comment: item.comment || '',
+        created_at: dateStr
+      });
+      setInflowModalOpen(true);
+    } else {
+      setOutflowData({
+        amount: String(item.amount),
+        currency: item.currency || 'UZS',
+        payment_method: item.payment_method || 'CASH',
+        expense_category: item.expense_category || '',
+        comment: item.comment || '',
+        created_at: dateStr
+      });
+      setOutflowModalOpen(true);
     }
   };
 
@@ -360,10 +440,7 @@ const CashRegister = () => {
 
         <div className="flex items-center space-x-3">
           <button
-            onClick={() => {
-              setFormError('');
-              setInflowModalOpen(true);
-            }}
+            onClick={openInflowModal}
             className="flex-1 sm:flex-initial flex items-center justify-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-semibold rounded-xl shadow-lg shadow-emerald-500/20 transition-all transform active:scale-95 text-sm"
           >
             <ArrowUpRight className="w-5 h-5" />
@@ -371,10 +448,7 @@ const CashRegister = () => {
           </button>
 
           <button
-            onClick={() => {
-              setFormError('');
-              setOutflowModalOpen(true);
-            }}
+            onClick={openOutflowModal}
             className="flex-1 sm:flex-initial flex items-center justify-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-400 hover:to-pink-500 text-white font-semibold rounded-xl shadow-lg shadow-rose-500/20 transition-all transform active:scale-95 text-sm"
           >
             <ArrowDownLeft className="w-5 h-5" />
@@ -579,19 +653,20 @@ const CashRegister = () => {
                 <th className="py-3.5 px-4">Izoh</th>
                 <th className="py-3.5 px-4">Kiritdi</th>
                 <th className="py-3.5 px-4">Vaqti</th>
+                {isDirector && <th className="py-3.5 px-4 text-right">Amallar</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60">
               {loading ? (
                 <tr>
-                  <td colSpan="8" className="text-center py-12 text-slate-400">
+                  <td colSpan={isDirector ? 9 : 8} className="text-center py-12 text-slate-400">
                     <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-cyan-400" />
                     Tranzaksiyalar yuklanmoqda...
                   </td>
                 </tr>
               ) : transactions.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="text-center py-12 text-slate-400">
+                  <td colSpan={isDirector ? 9 : 8} className="text-center py-12 text-slate-400">
                     Tranzaksiyalar topilmadi
                   </td>
                 </tr>
@@ -654,13 +729,40 @@ const CashRegister = () => {
                       {item.created_by_detail?.first_name || item.created_by_detail?.username || 'User'}
                     </td>
                     <td className="py-3.5 px-4 text-xs text-slate-500 font-mono">
-                      {new Date(item.created_at).toLocaleDateString('uz-UZ', {
-                        month: '2-digit',
-                        day: '2-digit',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
+                      <div>
+                        {new Date(item.created_at).toLocaleDateString('uz-UZ', {
+                          year: '2-digit',
+                          month: '2-digit',
+                          day: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </div>
+                      {item.updated_at && (
+                        <div className="text-[10px] text-amber-400/80 mt-0.5 flex items-center gap-1">
+                          <Pencil className="w-2.5 h-2.5" />
+                          {new Date(item.updated_at).toLocaleDateString('uz-UZ', {
+                            year: '2-digit',
+                            month: '2-digit',
+                            day: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </div>
+                      )}
                     </td>
+                    {isDirector && (
+                      <td className="py-3.5 px-4 text-right">
+                        <button
+                          onClick={() => openEditModal(item)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-cyan-500/20 text-cyan-400 border border-slate-700 hover:border-cyan-500/40 transition-colors"
+                          title="Tahrirlash"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                          Tahrirlash
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))
               )}
@@ -711,15 +813,15 @@ const CashRegister = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-2xl shadow-2xl p-6 relative">
             <button
-              onClick={() => setInflowModalOpen(false)}
+              onClick={closeInflowModal}
               className="absolute top-4 right-4 text-slate-400 hover:text-white"
             >
               <X className="w-5 h-5" />
             </button>
 
             <h3 className="text-xl font-bold text-emerald-400 mb-1 flex items-center gap-2">
-              <ArrowUpRight className="w-6 h-6" />
-              Kassaga Kirim Qilish
+              {editingId ? <Pencil className="w-6 h-6" /> : <ArrowUpRight className="w-6 h-6" />}
+              {editingId ? 'Kirimni Tahrirlash' : 'Kassaga Kirim Qilish'}
             </h3>
             <p className="text-xs text-slate-400 mb-5">Admin kiritgan mijoz yoki boshqa manbani tanlang</p>
 
@@ -731,6 +833,23 @@ const CashRegister = () => {
             )}
 
             <form onSubmit={handleInflowSubmit} className="space-y-4">
+              {/* Sana tanlash — faqat direktor o'tgan kunlarga ham kirita oladi */}
+              {isDirector && (
+                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30">
+                  <label className="block text-xs font-semibold text-amber-300 mb-1.5 flex items-center gap-1.5">
+                    <Calendar className="w-4 h-4" />
+                    Sana (o'tgan kun uchun) {editingId ? '' : '— bo\'sh qoldirilsa bugun'}
+                  </label>
+                  <input
+                    type="date"
+                    value={inflowData.created_at}
+                    max={new Date().toISOString().slice(0, 10)}
+                    onChange={(e) => setInflowData({ ...inflowData, created_at: e.target.value })}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              )}
+
               {/* Toggle Source Mode */}
               <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-800/80 border border-slate-700/80">
                 <span className="text-xs font-semibold text-slate-300">
@@ -867,7 +986,7 @@ const CashRegister = () => {
               <div className="flex items-center justify-end space-x-3 pt-3">
                 <button
                   type="button"
-                  onClick={() => setInflowModalOpen(false)}
+                  onClick={closeInflowModal}
                   className="px-4 py-2 text-sm text-slate-400 hover:text-slate-200"
                 >
                   Bekor qilish
@@ -877,7 +996,7 @@ const CashRegister = () => {
                   disabled={submitting}
                   className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-white font-semibold rounded-xl text-sm transition-colors shadow-lg shadow-emerald-500/20"
                 >
-                  {submitting ? 'Saqlanmoqda...' : 'Kirimni Saqlash'}
+                  {submitting ? 'Saqlanmoqda...' : (editingId ? 'Kirimni Yangilash' : 'Kirimni Saqlash')}
                 </button>
               </div>
             </form>
@@ -890,15 +1009,15 @@ const CashRegister = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-2xl shadow-2xl p-6 relative">
             <button
-              onClick={() => setOutflowModalOpen(false)}
+              onClick={closeOutflowModal}
               className="absolute top-4 right-4 text-slate-400 hover:text-white"
             >
               <X className="w-5 h-5" />
             </button>
 
             <h3 className="text-xl font-bold text-rose-400 mb-1 flex items-center gap-2">
-              <ArrowDownLeft className="w-6 h-6" />
-              Kassadan Chiqim Qilish
+              {editingId ? <Pencil className="w-6 h-6" /> : <ArrowDownLeft className="w-6 h-6" />}
+              {editingId ? 'Chiqimni Tahrirlash' : 'Kassadan Chiqim Qilish'}
             </h3>
             <p className="text-xs text-slate-400 mb-5">Klinika xarajatlarini ro'yxatga olish</p>
 
@@ -910,6 +1029,23 @@ const CashRegister = () => {
             )}
 
             <form onSubmit={handleOutflowSubmit} className="space-y-4">
+              {/* Sana tanlash — faqat direktor o'tgan kunlarga ham kirita oladi */}
+              {isDirector && (
+                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30">
+                  <label className="block text-xs font-semibold text-amber-300 mb-1.5 flex items-center gap-1.5">
+                    <Calendar className="w-4 h-4" />
+                    Sana (o'tgan kun uchun) {editingId ? '' : '— bo\'sh qoldirilsa bugun'}
+                  </label>
+                  <input
+                    type="date"
+                    value={outflowData.created_at}
+                    max={new Date().toISOString().slice(0, 10)}
+                    onChange={(e) => setOutflowData({ ...outflowData, created_at: e.target.value })}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              )}
+
               {/* Valyuta tanlash (So'm UZS / Dollar USD) */}
               <div>
                 <label className="block text-xs font-semibold text-slate-400 mb-1.5">
@@ -1012,7 +1148,7 @@ const CashRegister = () => {
               <div className="flex items-center justify-end space-x-3 pt-3">
                 <button
                   type="button"
-                  onClick={() => setOutflowModalOpen(false)}
+                  onClick={closeOutflowModal}
                   className="px-4 py-2 text-sm text-slate-400 hover:text-slate-200"
                 >
                   Bekor qilish
@@ -1022,7 +1158,7 @@ const CashRegister = () => {
                   disabled={submitting}
                   className="px-5 py-2.5 bg-rose-500 hover:bg-rose-400 text-white font-semibold rounded-xl text-sm transition-colors shadow-lg shadow-rose-500/20"
                 >
-                  {submitting ? 'Saqlanmoqda...' : 'Chiqimni Saqlash'}
+                  {submitting ? 'Saqlanmoqda...' : (editingId ? 'Chiqimni Yangilash' : 'Chiqimni Saqlash')}
                 </button>
               </div>
             </form>

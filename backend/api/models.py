@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
+from django.utils import timezone
 
 class CustomUser(AbstractUser):
     ROLE_CHOICES = (
@@ -73,6 +74,7 @@ class Visitor(models.Model):
     category = models.CharField(max_length=50, choices=CATEGORY_CHOICES, default='Yangi mijoz')
     comment = models.TextField(blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(null=True, blank=True, help_text="Oxirgi marta tahrirlangan sana (faqat tahrirlansa)")
 
     class Meta:
         ordering = ['-created_at']
@@ -117,7 +119,9 @@ class Transaction(models.Model):
     expense_category = models.CharField(max_length=100, blank=True, null=True)
     comment = models.TextField(blank=True, default='')
     created_by = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='transactions')
-    created_at = models.DateTimeField(auto_now_add=True)
+    # auto_now_add o'rniga default=timezone.now — direktor o'tgan kunlarga ham kirim/chiqim kirita olishi uchun.
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(null=True, blank=True, help_text="Oxirgi marta tahrirlangan sana (faqat tahrirlansa)")
 
     class Meta:
         ordering = ['-created_at']

@@ -1,16 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
-import { 
-  Users, 
-  UserPlus, 
-  Search, 
-  Filter, 
-  X, 
+import {
+  Users,
+  UserPlus,
+  Search,
+  Filter,
+  X,
   RefreshCw,
   AlertCircle,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Pencil
 } from 'lucide-react';
 
 import PeriodFilter from '../components/PeriodFilter';
@@ -36,6 +37,7 @@ const Visitors = () => {
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState({
     full_name: '',
     age: '',
@@ -46,6 +48,28 @@ const Visitors = () => {
   const [formError, setFormError] = useState('');
 
   const canEdit = ['director', 'admin'].includes(user?.role);
+  // Tahrirlash faqat direktor (yoki superadmin) uchun
+  const isDirector = ['director', 'superadmin'].includes(user?.role);
+
+  const openCreateModal = () => {
+    setEditingId(null);
+    setFormError('');
+    setFormData({ full_name: '', age: '', gender: 'M', category: 'Yangi mijoz', comment: '' });
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (item) => {
+    setEditingId(item.id);
+    setFormError('');
+    setFormData({
+      full_name: item.full_name || '',
+      age: item.age || '',
+      gender: item.gender || 'M',
+      category: item.category || 'Yangi mijoz',
+      comment: item.comment || ''
+    });
+    setIsModalOpen(true);
+  };
 
   const fetchVisitors = async () => {
     setLoading(true);
@@ -116,8 +140,13 @@ const Visitors = () => {
         age: formData.age ? parseInt(formData.age, 10) : null
       };
 
-      await api.post('/visitors/', payload);
+      if (editingId) {
+        await api.patch(`/visitors/${editingId}/`, payload);
+      } else {
+        await api.post('/visitors/', payload);
+      }
       setIsModalOpen(false);
+      setEditingId(null);
       setFormData({
         full_name: '',
         age: '',
@@ -127,7 +156,7 @@ const Visitors = () => {
       });
       fetchVisitors();
     } catch (err) {
-      console.error('Error creating visitor:', err);
+      console.error('Error saving visitor:', err);
       setFormError('Xatolik yuz berdi. Iltimos qayta urinib ko\'ring.');
     } finally {
       setSubmitting(false);
@@ -161,7 +190,7 @@ const Visitors = () => {
 
         {canEdit && (
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={openCreateModal}
             className="flex items-center justify-center space-x-2 px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-semibold rounded-xl shadow-lg shadow-cyan-500/20 transition-all transform active:scale-95"
           >
             <UserPlus className="w-5 h-5" />
@@ -238,19 +267,20 @@ const Visitors = () => {
                 <th className="py-3.5 px-4">Jami to'langan</th>
                 <th className="py-3.5 px-4">Izoh</th>
                 <th className="py-3.5 px-4">Sana</th>
+                {isDirector && <th className="py-3.5 px-4 text-right">Amallar</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60">
               {loading ? (
                 <tr>
-                  <td colSpan="7" className="text-center py-12 text-slate-400">
+                  <td colSpan={isDirector ? 8 : 7} className="text-center py-12 text-slate-400">
                     <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-cyan-400" />
                     Ma'lumotlar yuklanmoqda...
                   </td>
                 </tr>
               ) : visitors.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="text-center py-12 text-slate-400">
+                  <td colSpan={isDirector ? 8 : 7} className="text-center py-12 text-slate-400">
                     Bemorlar topilmadi
                   </td>
                 </tr>
@@ -294,14 +324,40 @@ const Visitors = () => {
                       {item.comment || '—'}
                     </td>
                     <td className="py-3.5 px-4 text-xs text-slate-500 font-mono">
-                      {new Date(item.created_at).toLocaleDateString('uz-UZ', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
+                      <div>
+                        {new Date(item.created_at).toLocaleDateString('uz-UZ', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </div>
+                      {item.updated_at && (
+                        <div className="text-[10px] text-amber-400/80 mt-0.5 flex items-center gap-1">
+                          <Pencil className="w-2.5 h-2.5" />
+                          Tahrirlangan: {new Date(item.updated_at).toLocaleDateString('uz-UZ', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </div>
+                      )}
                     </td>
+                    {isDirector && (
+                      <td className="py-3.5 px-4 text-right">
+                        <button
+                          onClick={() => openEditModal(item)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-cyan-500/20 text-cyan-400 border border-slate-700 hover:border-cyan-500/40 transition-colors"
+                          title="Tahrirlash"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                          Tahrirlash
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))
               )}
@@ -352,17 +408,19 @@ const Visitors = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-2xl shadow-2xl p-6 relative">
             <button
-              onClick={() => setIsModalOpen(false)}
+              onClick={() => { setIsModalOpen(false); setEditingId(null); }}
               className="absolute top-4 right-4 text-slate-400 hover:text-white"
             >
               <X className="w-5 h-5" />
             </button>
 
             <h3 className="text-xl font-bold text-white mb-1 flex items-center gap-2">
-              <UserPlus className="w-5 h-5 text-cyan-400" />
-              Yangi Bemor Registratsiyasi
+              {editingId ? <Pencil className="w-5 h-5 text-cyan-400" /> : <UserPlus className="w-5 h-5 text-cyan-400" />}
+              {editingId ? 'Bemorni Tahrirlash' : 'Yangi Bemor Registratsiyasi'}
             </h3>
-            <p className="text-xs text-slate-400 mb-5">Qabulxonaga kelgan pacient ma'lumotlarini kiriting</p>
+            <p className="text-xs text-slate-400 mb-5">
+              {editingId ? "Bemor ma'lumotlarini o'zgartiring" : "Qabulxonaga kelgan pacient ma'lumotlarini kiriting"}
+            </p>
 
             {formError && (
               <div className="mb-4 p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs flex items-center gap-2">
@@ -451,7 +509,7 @@ const Visitors = () => {
               <div className="flex items-center justify-end space-x-3 pt-3">
                 <button
                   type="button"
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={() => { setIsModalOpen(false); setEditingId(null); }}
                   className="px-4 py-2 text-sm text-slate-400 hover:text-slate-200"
                 >
                   Bekor qilish
@@ -461,7 +519,7 @@ const Visitors = () => {
                   disabled={submitting}
                   className="px-5 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-white font-semibold rounded-xl text-sm transition-colors shadow-lg shadow-cyan-500/20"
                 >
-                  {submitting ? 'Saqlanmoqda...' : 'Saqlash'}
+                  {submitting ? 'Saqlanmoqda...' : (editingId ? 'Yangilash' : 'Saqlash')}
                 </button>
               </div>
             </form>

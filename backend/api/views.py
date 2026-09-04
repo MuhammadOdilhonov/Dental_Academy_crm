@@ -93,6 +93,10 @@ class VisitorViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(director=self.request.user.tenant_director)
 
+    def perform_update(self, serializer):
+        # Har tahrirlashda "tahrirlangan sana" yangilanadi
+        serializer.save(updated_at=timezone.now())
+
 
 class TransactionViewSet(viewsets.ModelViewSet):
     serializer_class = TransactionSerializer
@@ -110,8 +114,23 @@ class TransactionViewSet(viewsets.ModelViewSet):
             qs = qs.filter(director=user.tenant_director)
         return filter_by_period(qs, self.request, 'created_at')
 
+    def _can_backdate(self):
+        user = self.request.user
+        return bool(user.is_super or user.role == 'director')
+
     def perform_create(self, serializer):
+        # Faqat direktor/superadmin o'tgan sanaga (created_at) kirim/chiqim kirita oladi.
+        # Boshqalar uchun created_at e'tiborga olinmaydi (model default=timezone.now ishlaydi).
+        if not self._can_backdate():
+            serializer.validated_data.pop('created_at', None)
         serializer.save(created_by=self.request.user, director=self.request.user.tenant_director)
+
+    def perform_update(self, serializer):
+        # Faqat direktor tahrirlay oladi (permission darajasida cheklangan).
+        # created_at ni o'zgartirishga faqat direktorga ruxsat, va har tahrirlashda updated_at qo'yiladi.
+        if not self._can_backdate():
+            serializer.validated_data.pop('created_at', None)
+        serializer.save(updated_at=timezone.now())
 
 
 class DashboardStatsView(APIView):

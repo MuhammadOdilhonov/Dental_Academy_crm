@@ -27,7 +27,8 @@ class VisitorSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Visitor
-        fields = ('id', 'full_name', 'age', 'gender', 'category', 'comment', 'created_at', 'total_paid_uzs', 'total_paid_usd')
+        fields = ('id', 'full_name', 'age', 'gender', 'category', 'comment', 'created_at', 'updated_at', 'total_paid_uzs', 'total_paid_usd')
+        read_only_fields = ('updated_at',)
 
     def get_total_paid_uzs(self, obj):
         total = obj.transactions.filter(type='INFLOW', currency='UZS').aggregate(total=Sum('amount'))['total']
@@ -41,14 +42,18 @@ class TransactionSerializer(serializers.ModelSerializer):
     visitor_detail = VisitorSerializer(source='visitor', read_only=True)
     created_by_detail = CustomUserSerializer(source='created_by', read_only=True)
     created_by = serializers.PrimaryKeyRelatedField(read_only=True)
+    # created_at yoziladigan qilib qo'yildi — direktor o'tgan sanaga kirim/chiqim kirita olishi uchun.
+    # Yozish huquqi viewset (perform_create/perform_update) ichida faqat direktorga cheklangan.
+    created_at = serializers.DateTimeField(required=False)
 
     class Meta:
         model = Transaction
         fields = (
-            'id', 'type', 'visitor', 'visitor_detail', 'custom_source_name', 
-            'amount', 'currency', 'payment_method', 'expense_category', 'comment', 
-            'created_by', 'created_by_detail', 'created_at'
+            'id', 'type', 'visitor', 'visitor_detail', 'custom_source_name',
+            'amount', 'currency', 'payment_method', 'expense_category', 'comment',
+            'created_by', 'created_by_detail', 'created_at', 'updated_at'
         )
+        read_only_fields = ('updated_at',)
 
     def validate(self, data):
         trans_type = data.get('type')
